@@ -74,6 +74,40 @@ def render_txt(exam):
     return '\n'.join(lines) + '\n'
 
 
+def matching_exports(folder, exam):
+    """Match original header values, not sanitized filenames (which can collide)."""
+    matches = []
+    for path in folder.glob('*.txt'):
+        if path.is_symlink():
+            continue
+        try:
+            with path.open(encoding='utf-8-sig') as f:
+                header = [f.readline().rstrip('\r\n') for _ in range(6)]
+            if (header[0] == '인적성 시험 답안 | 양식 버전 1'
+                    and header[2] == f"시험 제목: {exam['title']}"
+                    and header[3] == f"회차: {exam['round'] or '미입력'}"):
+                matches.append(path)
+        except UnicodeError:
+            continue  # Unrelated text files need not be UTF-8.
+    return sorted(matches, key=lambda p: (p.stat().st_mtime_ns, p.name), reverse=True)
+
+
+def replace_export(path, exam):
+    """Write fully before atomically replacing the explicitly confirmed file."""
+    text = render_txt(exam)
+    fd, temporary = tempfile.mkstemp(dir=path.parent, prefix='answer-', suffix='.tmp')
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8-sig', newline='\n') as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+    return path
+
+
 def export_exam(folder, exam):
     folder.mkdir(parents=True, exist_ok=True)
     title = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', exam['title']).strip(' .')[:65] or '시험'
@@ -397,7 +431,22 @@ class App(tk.Tk):
             return False
         if 'folder' not in self.settings and not self.choose_folder(): return False
         try:
-            path = export_exam(self.folder, self.exam)
+            matches = matching_exports(self.folder, self.exam)
+            choice = False
+            if matches:
+                target = matches[0]
+                extra = f'동일한 제목·회차 파일 {len(matches)}개 중 가장 최근 파일입니다.\n' if len(matches) > 1 else ''
+                choice = messagebox.askyesnocancel(
+                    '같은 시험의 답안이 있습니다',
+                    f'시험: {self.exam["title"]} / {self.exam["round"] or "회차 미입력"}\n'
+                    f'{extra}덮어쓸 파일: {target.name}\n\n'
+                    '기존 답안과 메모, 직접 기입한 채점 내용도 교체됩니다.\n'
+                    '예: 이 파일 덮어쓰기\n아니요: 기존 파일을 유지하고 별도 저장\n취소: 저장 중단',
+                    parent=self, default=messagebox.CANCEL)
+                if choice is None:
+                    self.status.set('답안 TXT 저장 취소 · 입력 내용은 유지됩니다')
+                    return False
+            path = replace_export(matches[0], self.exam) if choice else export_exam(self.folder, self.exam)
             self.persist()
             self.status.set('답안 TXT 저장 완료')
             messagebox.showinfo('저장 완료', f'{path}\n\n답안지 폴더에서 파일을 채팅에 첨부하세요.')

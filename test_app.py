@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 import json
-from app import new_exam, validate_exam, export_exam, calculate, atomic_json, SUBJECTS
+from app import new_exam, validate_exam, export_exam, calculate, atomic_json, SUBJECTS, matching_exports, replace_export
 
 class Tests(unittest.TestCase):
     def test_roundtrip_and_export(self):
@@ -25,6 +25,30 @@ class Tests(unittest.TestCase):
             self.assertEqual(text.count('20 | 1'), 5)
             self.assertTrue(all(subject in text for subject in SUBJECTS))
             self.assertIn('둘째 줄', text)
+    def test_duplicate_title_round_and_atomic_replace(self):
+        from unittest.mock import patch
+        e = new_exam(); e['title'] = '시험/A'; e['round'] = '1'
+        with tempfile.TemporaryDirectory() as d:
+            folder = Path(d)
+            first = export_exam(folder, e)
+            original = first.read_bytes()
+            other = new_exam(); other['title'] = '시험?A'; other['round'] = '1'
+            # Same sanitized filename prefix must not count as the same title.
+            unrelated = export_exam(folder, other)
+            self.assertEqual(matching_exports(folder, e), [first])
+            e['round'] = '2'
+            self.assertEqual(matching_exports(folder, e), [])
+            e['round'] = '1'; e['answers'][0][0] = 5
+            with patch('app.os.replace', side_effect=OSError('locked file')):
+                with self.assertRaises(OSError): replace_export(first, e)
+            self.assertEqual(first.read_bytes(), original)
+            self.assertEqual(list(folder.glob('*.tmp')), [])
+            replace_export(first, e)
+            self.assertIn('01 | 5', first.read_text(encoding='utf-8-sig'))
+            self.assertTrue(unrelated.exists())
+            duplicate = export_exam(folder, e)
+            self.assertEqual(set(matching_exports(folder, e)), {first, duplicate})
+
     def test_bad_draft(self):
         for value in (6, -1, True, '1'):
             e = new_exam(); e['answers'][0][0] = value
