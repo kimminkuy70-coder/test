@@ -15,7 +15,7 @@ class Tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             p = Path(d)
             atomic_json(p/'draft.json', e)
-            self.assertEqual(validate_exam(json.loads((p/'draft.json').read_text())), e)
+            self.assertEqual(validate_exam(json.loads((p/'draft.json').read_text(encoding='utf-8'))), e)
             a, b = export_exam(p, e), export_exam(p, e)
             self.assertNotEqual(a, b)
             text = a.read_text(encoding='utf-8-sig')
