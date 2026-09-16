@@ -180,7 +180,7 @@ class App(tk.Tk):
         self.minsize(360, 540)
         height = min(900, max(540, self.winfo_screenheight() - 100))
         self.geometry(f'410x{height}+{max(0, self.winfo_screenwidth()-430)}+30')
-        # Physical minimums scale with Tk DPI; inner scroll panels remain usable.
+        # Each pane clips overflow into its own scroll area.
         self.panes = tk.PanedWindow(self, orient='vertical', sashwidth=9, sashrelief='raised',
                                     bg='#cad5e5', borderwidth=0, opaqueresize=True)
         self.panes.pack(fill='both', expand=True)
@@ -195,6 +195,19 @@ class App(tk.Tk):
         self.build_memo()
         self.status = tk.StringVar(value='이전 응시 기록 복원 완료' if self.draft_path.exists() else '새 시험을 시작하세요')
         ttk.Label(self, textvariable=self.status, anchor='w', padding=(7, 4), wraplength=330).pack(fill='x')
+        self.update_idletasks()
+        # Derive minimum width from actual font/widget requests, not a fixed pixel guess.
+        width_min = max(360, self.omr.body.winfo_reqwidth() + 26,
+                        self.calc.body.winfo_reqwidth() + 26)
+        scale = max(1.0, float(self.tk.call('tk', 'scaling')) / (96 / 72))
+        self.pane_minimums = tuple(round(v * scale) for v in (150, 105, 95))
+        for pane, minimum in zip((self.omr, self.calc, self.memo), self.pane_minimums):
+            self.panes.paneconfigure(pane, minsize=minimum)
+        height_min = max(540, sum(self.pane_minimums) + 90)
+        self.minsize(width_min, height_min)
+        width = max(410, width_min)
+        height = max(height, height_min)
+        self.geometry(f'{width}x{height}+{max(0, self.winfo_screenwidth()-width-20)}+30')
         self.protocol('WM_DELETE_WINDOW', self.close)
         self.restore_subject()
         self.title_var.trace_add('write', lambda *_: self.changed())
@@ -290,6 +303,8 @@ class App(tk.Tk):
         self.job = self.after(450, self.persist)
 
     def persist(self):
+        if self.job:
+            self.after_cancel(self.job)
         self.job = None
         self.collect()
         try:

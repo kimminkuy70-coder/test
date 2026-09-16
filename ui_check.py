@@ -24,7 +24,7 @@ class ProfileApp(App):
 def inspect(app):
     panes = [app.omr, app.calc, app.memo]
     for i, pane in enumerate(panes):
-        assert pane.winfo_height() >= (150, 105, 95)[i], ('pane height', i, pane.winfo_height())
+        assert pane.winfo_height() >= app.pane_minimums[i], ('pane height', i, pane.winfo_height())
         if i:
             assert panes[i-1].winfo_y() + panes[i-1].winfo_height() <= pane.winfo_y(), 'pane overlap'
     def check_children(parent):
@@ -73,12 +73,12 @@ def run_profile(resolution, percent):
         assert app.answer_vars[0].get() == 3
         assert app.notes.get('1.0','end-1c') == '메모 검증\n' * 100
         assert app.persist()
-        app.destroy()
+        app.close()
         app = ProfileApp(Path(folder)); app.update()
         assert app.answer_vars[0].get() == 3 and app.exam['answers'][1][0] == 5
         assert app.notes.get('1.0','end-1c') == '메모 검증\n' * 100
         minimum = app.minsize()
-        app.destroy()
+        app.close()
         return {'resolution':resolution, 'scale_percent':percent, 'layouts':completed, 'minimum_window':minimum, 'status':'passed'}
 
 if __name__ == '__main__':
