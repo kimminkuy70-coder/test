@@ -19,7 +19,7 @@ macOS 앱은 Apple 개발자 서명이 없어 처음 한 번 경고가 뜹니다
 2. Python 3.10 이상(python.org 공식 설치본, Tcl/Tk 포함)을 설치합니다. macOS 기본 `/usr/bin/python3`는 버전이 낮아 사용할 수 없습니다.
 3. Windows는 `start.bat`, macOS는 `start.command`를 더블 클릭합니다. 또는 `python app.py`(macOS: `python3 app.py`)를 실행합니다.
 
-외부 Python 패키지는 필요하지 않습니다. 실행 파일은 GitHub Actions의 **Build apps** 워크플로가 만들며, Artifacts의 `aptitude-companion-windows`/`aptitude-companion-macos`에서도 받을 수 있습니다.
+외부 Python 패키지는 필요하지 않습니다. 실행 파일은 GitHub Actions의 **Build apps** 워크플로가 만들며, Actions 실행 화면 아래 Artifacts의 `AptitudeCompanion-Windows.exe`/`AptitudeCompanion-macOS.zip`에서도 받을 수 있습니다(추가 압축 없이 그대로 받아집니다).
 
 ## 사용
 
