@@ -1,20 +1,29 @@
-"""Windows Tk layout tests using simulated screen metrics and font DPI.
-These do not change the runner's physical monitor resolution or Windows DPI.
+"""Tk layout tests using simulated screen metrics and font DPI.
+Windows: two resolutions x 100-200% font scaling. macOS: MacBook logical
+resolutions with Tk's native point scaling. These do not change the runner's
+physical monitor resolution or OS display scaling.
 """
 import json
+import sys
 import tempfile
 from pathlib import Path
 from tkinter import ttk
 from app import App
 
 REPORT = []
+if sys.platform == 'darwin':
+    # MacBook Air 13" larger-text/default, MacBook Pro 14"/16" defaults.
+    PROFILES = [(resolution, None) for resolution in ((1280, 832), (1470, 956), (1512, 982), (1728, 1117))]
+else:
+    PROFILES = [(resolution, percent) for resolution in ((1920, 1080), (2880, 1800)) for percent in (100, 125, 150, 200)]
 
 class ProfileApp(App):
     resolution = (1920, 1080)
     percent = 100
 
     def winfo_screenheight(self):
-        self.tk.call('tk', 'scaling', (96 / 72) * self.percent / 100)
+        if self.percent:
+            self.tk.call('tk', 'scaling', (96 / 72) * self.percent / 100)
         return self.resolution[1]
 
     def winfo_screenwidth(self):
@@ -79,19 +88,18 @@ def run_profile(resolution, percent):
         assert app.notes.get('1.0','end-1c') == '메모 검증\n' * 100
         minimum = app.minsize()
         app.close()
-        return {'resolution':resolution, 'scale_percent':percent, 'layouts':completed, 'minimum_window':minimum, 'status':'passed'}
+        return {'resolution':resolution, 'scale_percent':percent or 'native', 'layouts':completed, 'minimum_window':minimum, 'status':'passed'}
 
 if __name__ == '__main__':
-    for resolution in ((1920,1080),(2880,1800)):
-        for percent in (100,125,150,200):
-            try:
-                result = run_profile(resolution,percent)
-            except Exception as exc:
-                result = {'resolution':resolution,'scale_percent':percent,'status':'failed','error':str(exc)}
-                REPORT.append(result)
-                print(json.dumps(result),flush=True)
-                Path('display-test-results.json').write_text(json.dumps(REPORT,indent=2),encoding='utf-8')
-                raise
+    for resolution, percent in PROFILES:
+        try:
+            result = run_profile(resolution,percent)
+        except Exception as exc:
+            result = {'resolution':resolution,'scale_percent':percent or 'native','status':'failed','error':str(exc)}
             REPORT.append(result)
             print(json.dumps(result),flush=True)
+            Path('display-test-results.json').write_text(json.dumps(REPORT,indent=2),encoding='utf-8')
+            raise
+        REPORT.append(result)
+        print(json.dumps(result),flush=True)
     Path('display-test-results.json').write_text(json.dumps(REPORT,indent=2),encoding='utf-8')

@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 import json
-from app import new_exam, validate_exam, export_exam, calculate, atomic_json, SUBJECTS, matching_exports, replace_export
+from app import new_exam, validate_exam, export_exam, calculate, atomic_json, SUBJECTS, matching_exports, replace_export, default_data_dir
 
 class Tests(unittest.TestCase):
     def test_roundtrip_and_export(self):
@@ -59,5 +59,10 @@ class Tests(unittest.TestCase):
         for value in ('__import__("os")', '2**100', '[1]', 'True', '2//1'):
             with self.assertRaises(ValueError): calculate(value)
         with self.assertRaises(ZeroDivisionError): calculate('1/0')
+    def test_data_dir_per_platform(self):
+        from unittest.mock import patch
+        self.assertEqual(default_data_dir('darwin'), Path.home() / 'Library' / 'Application Support' / 'AptitudeCompanion')
+        with patch.dict('app.os.environ', {'LOCALAPPDATA': str(Path('C:/Users/u/AppData/Local'))}):
+            self.assertEqual(default_data_dir('win32'), Path('C:/Users/u/AppData/Local') / 'AptitudeCompanion')
 
 if __name__ == '__main__': unittest.main()

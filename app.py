@@ -14,7 +14,19 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 SUBJECTS = ('언어이해', '자료해석', '창의수리', '언어추리', '수열추리')
-DATA_DIR = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'AptitudeCompanion'
+IS_MAC = sys.platform == 'darwin'
+# Tk on macOS maps 1pt to 1px (Windows: 1.33px), so macOS needs larger point sizes.
+FONT = 'Apple SD Gothic Neo' if IS_MAC else '맑은 고딕'
+FONT_SIZE = 13 if IS_MAC else 10
+
+
+def default_data_dir(platform=sys.platform):
+    if platform == 'darwin':
+        return Path.home() / 'Library' / 'Application Support' / 'AptitudeCompanion'
+    return Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'AptitudeCompanion'
+
+
+DATA_DIR = default_data_dir()
 
 
 def new_exam():
@@ -158,6 +170,8 @@ class ScrollPanel(ttk.Frame):
         self.canvas = tk.Canvas(self, highlightthickness=0, bg='#f5f7fb', width=1, height=1)
         bar = ttk.Scrollbar(self, orient='vertical', command=self.canvas.yview)
         self.canvas.configure(yscrollcommand=bar.set)
+        if IS_MAC:
+            self.canvas.configure(yscrollincrement=10)
         self.canvas.pack(side='left', fill='both', expand=True)
         bar.pack(side='right', fill='y')
         self.body = ttk.Frame(self.canvas, padding=8)
@@ -175,7 +189,12 @@ class ScrollPanel(ttk.Frame):
             self.bind_wheels(child)
 
     def wheel(self, event):
-        self.canvas.yview_scroll(-int(event.delta / 120) if abs(event.delta) >= 120 else (-1 if event.delta > 0 else 1), 'units')
+        if IS_MAC:
+            # Trackpads send many small deltas; scroll 10px per delta unit, not a tenth of the pane.
+            steps = -event.delta if abs(event.delta) < 120 else -3 * int(event.delta / 120)
+        else:
+            steps = -int(event.delta / 120) if abs(event.delta) >= 120 else (-1 if event.delta > 0 else 1)
+        self.canvas.yview_scroll(steps, 'units')
         return 'break'
 
 
@@ -207,12 +226,13 @@ class App(tk.Tk):
         self.folder = Path(self.settings.get('folder', str(Path.home() / 'Documents' / '인적성답안')))
         style = ttk.Style(self)
         style.theme_use('clam')
-        style.configure('.', font=('맑은 고딕', 10), background='#f5f7fb')
+        style.configure('.', font=(FONT, FONT_SIZE), background='#f5f7fb')
         style.configure('TButton', padding=(5, 5))
-        style.configure('Title.TLabel', font=('맑은 고딕', 11, 'bold'), foreground='#17365d')
+        style.configure('Title.TLabel', font=(FONT, FONT_SIZE + 1, 'bold'), foreground='#17365d')
         style.configure('TRadiobutton', padding=(2, 5))
         self.minsize(360, 540)
-        height = min(900, max(540, self.winfo_screenheight() - 100))
+        # macOS also reserves the menu bar and Dock below the title bar.
+        height = min(900, max(540, self.winfo_screenheight() - (150 if IS_MAC else 100)))
         self.geometry(f'410x{height}+{max(0, self.winfo_screenwidth()-430)}+30')
         # Each pane clips overflow into its own scroll area.
         self.panes = tk.PanedWindow(self, orient='vertical', sashwidth=9, sashrelief='raised',
@@ -243,6 +263,9 @@ class App(tk.Tk):
         height = max(height, height_min)
         self.geometry(f'{width}x{height}+{max(0, self.winfo_screenwidth()-width-20)}+30')
         self.protocol('WM_DELETE_WINDOW', self.close)
+        if IS_MAC:
+            # Cmd+Q and Dock → Quit bypass WM_DELETE_WINDOW; save the draft first.
+            self.createcommand('tk::mac::Quit', self.close)
         self.restore_subject()
         self.title_var.trace_add('write', lambda *_: self.changed())
         self.round_var.trace_add('write', lambda *_: self.changed())
@@ -297,9 +320,10 @@ class App(tk.Tk):
         b.columnconfigure(0, weight=1)
         ttk.Label(b, text='02  계산기', style='Title.TLabel').grid(row=0, column=0, sticky='w')
         self.expr = tk.StringVar()
-        entry = ttk.Entry(b, textvariable=self.expr, justify='right', width=12, font=('맑은 고딕', 14))
+        entry = ttk.Entry(b, textvariable=self.expr, justify='right', width=12, font=(FONT, FONT_SIZE + 4))
         entry.grid(row=1, column=0, sticky='ew', pady=5)
         entry.bind('<Return>', lambda _: self.evaluate())
+        entry.bind('<KP_Enter>', lambda _: self.evaluate())
         entry.bind('<Escape>', lambda _: self.expr.set(''))
         self.calc_entry = entry
         self.calc_status = tk.StringVar(value='Enter 계산 · Esc 지우기')
@@ -318,7 +342,7 @@ class App(tk.Tk):
         ttk.Label(self.memo, textvariable=self.memo_title).pack(anchor='w')
         holder = ttk.Frame(self.memo)
         holder.pack(fill='both', expand=True, pady=(4, 0))
-        self.notes = tk.Text(holder, width=1, height=1, wrap='word', undo=True, font=('맑은 고딕', 11),
+        self.notes = tk.Text(holder, width=1, height=1, wrap='word', undo=True, font=(FONT, FONT_SIZE + 1),
                              relief='solid', borderwidth=1, padx=6, pady=5)
         bar = ttk.Scrollbar(holder, orient='vertical', command=self.notes.yview)
         self.notes.configure(yscrollcommand=bar.set)

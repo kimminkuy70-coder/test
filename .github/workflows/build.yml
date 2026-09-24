@@ -1,12 +1,18 @@
-name: Build Windows app
+name: Build apps
 on:
   push:
     branches: [main]
+    tags: ['v*']
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Create a GitHub release with this new tag (e.g. v1.0.0). Leave empty to build only.'
+        required: false
+        default: ''
 permissions:
   contents: read
 jobs:
-  build:
+  windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,7 +23,78 @@ jobs:
       - run: python ui_check.py
       - run: python -m pip install pyinstaller==6.16.0
       - run: python -m PyInstaller --clean --noconfirm --onefile --windowed --name AptitudeCompanion --add-data "grading_prompt.txt;." app.py
+      - run: Move-Item dist/AptitudeCompanion.exe dist/AptitudeCompanion-Windows.exe
       - uses: actions/upload-artifact@v4
         with:
           name: aptitude-companion-windows
-          path: dist/AptitudeCompanion.exe
+          path: dist/AptitudeCompanion-Windows.exe
+
+  macos:
+    runs-on: macos-15
+    env:
+      # python.org build: universal2 (Intel + Apple Silicon) with bundled Tcl/Tk 8.6.
+      PYTHON_VERSION: '3.12.10'
+      PYTHON: /Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install universal2 Python from python.org
+        run: |
+          curl -fsSLO "https://www.python.org/ftp/python/${PYTHON_VERSION}/python-${PYTHON_VERSION}-macos11.pkg"
+          sudo installer -pkg "python-${PYTHON_VERSION}-macos11.pkg" -target /
+          "$PYTHON" -c "import sys, tkinter; print(sys.version, 'Tk', tkinter.TkVersion)"
+          lipo -archs "$PYTHON"
+      - run: $PYTHON -m unittest -v
+      - run: $PYTHON ui_check.py
+      - run: $PYTHON -m pip install pyinstaller==6.16.0
+      - run: >-
+          $PYTHON -m PyInstaller --clean --noconfirm --windowed --target-arch universal2
+          --osx-bundle-identifier io.github.kimminkuy70-coder.aptitudecompanion
+          --name AptitudeCompanion --add-data "grading_prompt.txt:." app.py
+      - name: Verify bundle
+        run: |
+          APP=dist/AptitudeCompanion.app
+          ARCHS=$(lipo -archs "$APP/Contents/MacOS/AptitudeCompanion")
+          echo "Architectures: $ARCHS"
+          [[ " $ARCHS " == *" x86_64 "* && " $ARCHS " == *" arm64 "* ]]
+          codesign --verify --deep --strict "$APP"
+          test -f "$APP/Contents/Frameworks/grading_prompt.txt"  # sys._MEIPASS
+      - name: Launch smoke test (Apple Silicon and Intel via Rosetta)
+        run: |
+          smoke() {
+            "$@" dist/AptitudeCompanion.app/Contents/MacOS/AptitudeCompanion &
+            pid=$!
+            sleep 15
+            kill -0 "$pid"  # Still running means Tk started without errors.
+            kill "$pid"
+          }
+          smoke arch -arm64
+          if arch -x86_64 /usr/bin/true 2>/dev/null; then smoke arch -x86_64; else echo 'Rosetta unavailable; skipped Intel launch'; fi
+      - name: Package
+        run: ditto -c -k --sequesterRsrc --keepParent dist/AptitudeCompanion.app dist/AptitudeCompanion-macOS.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aptitude-companion-macos
+          path: dist/AptitudeCompanion-macOS.zip
+
+  release:
+    needs: [windows, macos]
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ inputs.release_tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+      - name: Publish release
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid tag: $TAG"; exit 1; }
+          gh release create "$TAG" release/AptitudeCompanion-Windows.exe release/AptitudeCompanion-macOS.zip \
+            --target "$GITHUB_SHA" --title "인적성 시험 도우미 $TAG (Windows · macOS)" \
+            --notes-file .github/release-notes.md
