@@ -49,7 +49,7 @@ macOS 앱은 Apple 개발자 서명이 없어 처음 한 번 경고가 뜹니다
 `python -m unittest -v` — 100문항 내보내기, 저장/복원, 덮어쓰기 방지, 데이터 검증, 계산기 안전성, 운영체제별 저장 위치.
 `python ui_check.py` — 그래픽 디스플레이가 필요하며 창 크기/분할 경계/과목 전환을 검증합니다.
 
-GitHub Actions의 **Build apps** 워크플로가 Windows 러너에서 EXE(PyInstaller onefile)를, macOS 러너에서 python.org universal2 Python으로 Intel·Apple Silicon 공용 `.app`을 빌드합니다. macOS 빌드는 두 아키텍처 포함 여부, 코드 서명(ad-hoc) 무결성, 실제 실행(Apple Silicon 및 Rosetta를 통한 Intel)을 검사합니다. 실제 PC의 배율별 사용감, 탐색기/Finder 실행, macOS 보안 경고 처리는 사용자 PC에서 최종 확인이 필요합니다.
+`main`·`claude/**` 브랜치 push 때마다 GitHub Actions의 **Build apps** 워크플로가 Windows 러너에서 EXE(PyInstaller onefile)를, macOS 러너에서 python.org universal2 Python으로 Intel·Apple Silicon 공용 `.app`을 빌드합니다. macOS 빌드는 두 아키텍처 포함 여부, 코드 서명(ad-hoc) 무결성, 실제 실행(Apple Silicon 및 Rosetta를 통한 Intel)을 검사합니다. 실제 PC의 배율별 사용감, 탐색기/Finder 실행, macOS 보안 경고 처리는 사용자 PC에서 최종 확인이 필요합니다.
 
 ## 릴리즈
 
