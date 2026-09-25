@@ -3,9 +3,11 @@ These do not change the runner's physical monitor resolution or Windows DPI.
 """
 import json
 import tempfile
+import time
 from pathlib import Path
-from tkinter import ttk
-from app import App
+from tkinter import ttk, messagebox
+from unittest.mock import patch
+from app import App, SUBJECTS, read_cells
 
 REPORT = []
 
@@ -22,7 +24,7 @@ class ProfileApp(App):
 
 
 def inspect(app):
-    panes = [app.omr, app.calc, app.memo]
+    panes = [app.omr_pane, app.calc, app.memo]
     for i, pane in enumerate(panes):
         assert pane.winfo_height() >= app.pane_minimums[i], ('pane height', i, pane.winfo_height())
         if i:
@@ -35,6 +37,9 @@ def inspect(app):
                 assert child.winfo_width() >= child.winfo_reqwidth(), ('text clipping', str(child), child.winfo_width(), child.winfo_reqwidth())
             if isinstance(child, ttk.Frame):
                 check_children(child)
+    # The fixed answer-sheet header and the timer bar must fit without clipping too.
+    check_children(app.omr_head)
+    check_children(app.timer_bar)
     for panel in (app.omr, app.calc):
         check_children(panel.body)
         panel.canvas.yview_moveto(1)
@@ -42,6 +47,30 @@ def inspect(app):
         assert abs(panel.canvas.yview()[1] - 1) < .01, 'cannot reach end'
         panel.canvas.yview_moveto(0)
     assert app.notes.winfo_height() > 0
+
+
+def check_timer(app, folder):
+    """Time-up locks only that subject, auto-saves the Excel file, and survives a restart."""
+    app.folder = folder / 'answers'
+    app.title_var.set('Timer test')
+    app.subject_var.set('창의수리'); app.switch_subject()
+    app.start_timer()
+    # Fast-forward: replace the scheduled tick with one that finds the deadline passed.
+    app.after_cancel(app.timer_job)
+    app.deadline = time.monotonic()
+    with patch.object(messagebox, 'showwarning') as warning:
+        app.tick()
+    assert warning.called
+    assert app.exam['expired'] == [2] and app.exam['timed_out'] == [2]
+    assert all(w.instate(['disabled']) for w in app.answer_widgets)
+    assert app.timer_text.get() == '00:00' and app.timer_button.instate(['disabled'])
+    saved = folder / 'answers' / 'Timer test_회차미입력.xlsx'
+    assert read_cells(saved)['창의수리']['B26'] == '예', 'time-up auto save'
+    app.subject_var.set('언어추리'); app.switch_subject()
+    assert not any(w.instate(['disabled']) for w in app.answer_widgets)
+    assert app.timer_text.get() == '15:00' and not app.timer_button.instate(['disabled'])
+    app.subject_var.set('창의수리'); app.switch_subject()
+    assert all(w.instate(['disabled']) for w in app.answer_widgets)
 
 
 def run_profile(resolution, percent):
@@ -77,6 +106,18 @@ def run_profile(resolution, percent):
         app = ProfileApp(Path(folder)); app.update()
         assert app.answer_vars[0].get() == 3 and app.exam['answers'][1][0] == 5
         assert app.notes.get('1.0','end-1c') == '메모 검증\n' * 100
+        check_timer(app, Path(folder))
+        app.close()
+        app = ProfileApp(Path(folder)); app.update()
+        app.folder = Path(folder) / 'answers'
+        app.settings['folder'] = str(app.folder)
+        assert SUBJECTS[app.current] == '언어이해' and app.exam['expired'] == [2]
+        app.subject_var.set('창의수리'); app.switch_subject()
+        assert all(w.instate(['disabled']) for w in app.answer_widgets), 'lock survives restart'
+        with patch.object(messagebox, 'showinfo'):
+            assert app.save_answers()
+        assert app.exam['expired'] == [] and app.exam['timed_out'] == [2]
+        assert not any(w.instate(['disabled']) for w in app.answer_widgets), 'manual save unlocks'
         minimum = app.minsize()
         app.close()
         return {'resolution':resolution, 'scale_percent':percent, 'layouts':completed, 'minimum_window':minimum, 'status':'passed'}
