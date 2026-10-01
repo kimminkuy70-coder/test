@@ -243,7 +243,7 @@ class App(tk.Tk):
         self.memo = ttk.Frame(self.panes, padding=8)
         self.panes.add(self.omr, minsize=150, stretch='always', height=int(height * .53))
         self.panes.add(self.calc, minsize=105, stretch='always', height=int(height * .29))
-        self.panes.add(self.memo, minsize=95, stretch='always')
+        self.panes.add(self.memo, minsize=125, stretch='always')
         self.build_omr()
         self.build_calculator()
         self.build_memo()
@@ -254,7 +254,7 @@ class App(tk.Tk):
         width_min = max(360, self.omr.body.winfo_reqwidth() + 26,
                         self.calc.body.winfo_reqwidth() + 26)
         scale = max(1.0, float(self.tk.call('tk', 'scaling')) / (96 / 72))
-        self.pane_minimums = tuple(round(v * scale) for v in (150, 105, 95))
+        self.pane_minimums = tuple(round(v * scale) for v in (150, 105, 125))
         for pane, minimum in zip((self.omr, self.calc, self.memo), self.pane_minimums):
             self.panes.paneconfigure(pane, minsize=minimum)
         height_min = max(540, sum(self.pane_minimums) + 90)
@@ -338,10 +338,15 @@ class App(tk.Tk):
 
     def build_memo(self):
         ttk.Label(self.memo, text='03  메모지', style='Title.TLabel').pack(anchor='w')
+        tabs = ttk.Notebook(self.memo)
+        tabs.pack(fill='both', expand=True, pady=(4, 0))
+        self.memo_tabs = tabs
+        text_tab = ttk.Frame(tabs, padding=(0, 4, 0, 0))
+        tabs.add(text_tab, text='메모')
         self.memo_title = tk.StringVar()
-        ttk.Label(self.memo, textvariable=self.memo_title).pack(anchor='w')
-        holder = ttk.Frame(self.memo)
-        holder.pack(fill='both', expand=True, pady=(4, 0))
+        ttk.Label(text_tab, textvariable=self.memo_title).pack(anchor='w')
+        holder = ttk.Frame(text_tab)
+        holder.pack(fill='both', expand=True, pady=(2, 0))
         self.notes = tk.Text(holder, width=1, height=1, wrap='word', undo=True, font=(FONT, FONT_SIZE + 1),
                              relief='solid', borderwidth=1, padx=6, pady=5)
         bar = ttk.Scrollbar(holder, orient='vertical', command=self.notes.yview)
@@ -349,6 +354,29 @@ class App(tk.Tk):
         bar.pack(side='right', fill='y')
         self.notes.pack(fill='both', expand=True)
         self.notes.bind('<<Modified>>', self.note_changed)
+        self.build_sketch(tabs)
+
+    def build_sketch(self, tabs):
+        # Scratch drawing only: black pen and clear; drawings are not saved.
+        tab = ttk.Frame(tabs, padding=(0, 4, 0, 0))
+        tabs.add(tab, text='그림판')
+        self.sketch = tk.Canvas(tab, width=1, height=1, bg='white', highlightthickness=1,
+                                highlightbackground='#9aa7b8', cursor='pencil')
+        self.sketch.pack(fill='both', expand=True)
+        # Overlay the button so the canvas keeps the whole tab height.
+        ttk.Button(tab, text='초기화', command=lambda: self.sketch.delete('all')).place(
+            in_=self.sketch, relx=1, x=-4, y=4, anchor='ne')
+        self.pen = None
+        def start(event):
+            self.pen = (event.x, event.y)
+        def draw(event):
+            if self.pen:
+                self.sketch.create_line(*self.pen, event.x, event.y, fill='black', width=2,
+                                        capstyle='round', joinstyle='round')
+            self.pen = (event.x, event.y)
+        self.sketch.bind('<ButtonPress-1>', start)
+        self.sketch.bind('<B1-Motion>', draw)
+        self.sketch.bind('<ButtonRelease-1>', lambda _: setattr(self, 'pen', None))
 
     def collect(self):
         self.exam['title'] = self.title_var.get().strip()

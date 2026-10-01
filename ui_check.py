@@ -81,6 +81,14 @@ def run_profile(resolution, percent):
         app.subject_var.set('언어이해'); app.switch_subject()
         assert app.answer_vars[0].get() == 3
         assert app.notes.get('1.0','end-1c') == '메모 검증\n' * 100
+        app.memo_tabs.select(1); app.update()
+        assert app.sketch.winfo_height() > 20 and app.sketch.winfo_width() > 20, 'sketch canvas too small'
+        app.sketch.event_generate('<ButtonPress-1>', x=5, y=5)
+        app.sketch.event_generate('<B1-Motion>', x=15, y=12)
+        app.sketch.event_generate('<ButtonRelease-1>', x=15, y=12)
+        assert len(app.sketch.find_all()) == 1, 'pen stroke not drawn'
+        app.sketch.delete('all')
+        app.memo_tabs.select(0); app.update()
         assert app.persist()
         app.close()
         app = ProfileApp(Path(folder)); app.update()
