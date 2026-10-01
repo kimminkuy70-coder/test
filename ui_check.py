@@ -83,6 +83,12 @@ def run_profile(resolution, percent):
         assert app.notes.get('1.0','end-1c') == '메모 검증\n' * 100
         app.memo_tabs.select(1); app.update()
         assert app.sketch.winfo_height() > 20 and app.sketch.winfo_width() > 20, 'sketch canvas too small'
+        tabs, clear = app.memo_tabs, app.sketch_clear
+        assert clear.winfo_ismapped() and clear.winfo_width() >= clear.winfo_reqwidth(), 'reset button hidden'
+        tab_row_end = tabs.winfo_rooty() + tabs.winfo_height() - app.sketch.master.winfo_height()
+        assert clear.winfo_rooty() + clear.winfo_height() <= tab_row_end + 1, 'reset button covers the canvas'
+        assert tabs.identify(clear.winfo_rootx() - tabs.winfo_rootx() - 2, 5) == '', 'reset button covers a tab'
+        assert app.sketch.winfo_width() >= tabs.winfo_width() - 12, 'canvas narrowed'
         app.sketch.event_generate('<ButtonPress-1>', x=5, y=5)
         app.sketch.event_generate('<B1-Motion>', x=15, y=12)
         app.sketch.event_generate('<ButtonRelease-1>', x=15, y=12)

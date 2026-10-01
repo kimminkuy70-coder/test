@@ -360,12 +360,19 @@ class App(tk.Tk):
         # Scratch drawing only: black pen and clear; drawings are not saved.
         tab = ttk.Frame(tabs, padding=(0, 4, 0, 0))
         tabs.add(tab, text='그림판')
-        # Button beside the canvas, so the canvas keeps the whole tab height.
-        ttk.Button(tab, text='초기화', command=lambda: self.sketch.delete('all')).pack(
-            side='right', anchor='n', padx=(4, 0))
         self.sketch = tk.Canvas(tab, width=1, height=1, bg='white', highlightthickness=1,
                                 highlightbackground='#9aa7b8')
-        self.sketch.pack(side='left', fill='both', expand=True)
+        self.sketch.pack(fill='both', expand=True)
+        # Sits in the empty right end of the tab row, so the canvas keeps its full size.
+        ttk.Style(self).configure('Tab.TButton', padding=(6, 0))
+        self.sketch_clear = ttk.Button(self.memo, text='초기화', style='Tab.TButton', width=6,
+                                       command=lambda: self.sketch.delete('all'))
+        def place_clear(_=None):
+            if tabs.index('current') == 1:
+                self.sketch_clear.place(in_=tabs, relx=1, y=1, anchor='ne')
+            else:
+                self.sketch_clear.place_forget()
+        tabs.bind('<<NotebookTabChanged>>', place_clear)
         self.pen = None
         def start(event):
             self.pen = (event.x, event.y)
